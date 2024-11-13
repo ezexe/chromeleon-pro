@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta name="viewport" content="width=500">
+	<title>pointer & touch events</title>
+	<link rel="stylesheet" type="text/css" href="testindex.css">
+	<script src="testglobals.js"></script>
+	<script src="testgeneric.js"></script>
+	<!-- custom -->
+	<style>
+		table {width: 580px;}
+		.reset {
+			float: left;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			height: 50px;
+			width: 110px;
+			color: var(--test0);
+			border: 2px solid var(--test7);
+			cursor: pointer;
+			margin-bottom: 20px;
+		}
+		.pointer {
+			float: left;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			height: 210px;
+			width: 110px;
+			color: var(--test0);
+			border: 2px solid var(--test7);
+			cursor: pointer;
+			margin-bottom: 20px;
+		}
+		.flex-item {
+			text-align: center;
+			margin: 10px;
+		}
+	</style>
+</head>
+
+<body>
+
+	<table>
+	<tr><td><h2>TorZillaPrint</h2></td></tr>
+	<tr><td class="blurb"><a class="return" href="../index.html#devices">return to TZP index</a></td></tr>
+	</table>
+
+	<table id="tb7">
+		<col width="23%"><col width="77%">
+		<thead><tr><th colspan="2">
+			<div class="nav-title">pointer & touch events</div>
+		</th></tr></thead>
+		<tr><td colspan="2"></td></tr>
+		<tr>
+			<td>
+				<div class="reset" id="reset"><div class="flex=item" id="resettext">1: START</div></div>
+				<div class="pointer" id="target">
+					<div class="flex-item"><br>2: CLICK<br><br>context click<br>(if you can)<br><br>otherwise<br><br>keep stabbing<br>and moving</div>
+				</div>
+				<div class="reset"><div class="flex=item">3: FINISH</div></div>
+			</td>
+			<td class="mono" style="text-align: left; vertical-align: top;">
+				<div class="s6">OVERALL HASH <span class="no_color" id="hash"></span></div><br></div>
+				<div class="s4"><u>POINTER</u>
+					<span class='no_color spaces' id='pointerevents'></span>
+					<span class="no_color" id="pointerhash"></span>
+				</div><br>
+				<div class="no_color spaces" id="results"></div>
+				<div class="s4"><u>TOUCH</u>
+					<span class='no_color spaces' id='touchevents'></span>
+					<span class="no_color" id="touchhash"></span>
+				</div><br>
+				<div class="no_color spaces" id="touch"></div><hr><br>
+				<div class="s6 spaces">  maxTouchPoints <span class="no_color" id="maxTouchPoints"></span></div></div><br>
+				<div class="s6">touch properties <span class="no_color spaces" id="touch_properties"></span></div><br>
+				<div class="s4"><u>EVENTS</u></div><br><div class="no_color" id="events"></div>
+			</td>
+		</tr>
+	</table>
+	<br>
+
+<script>
+'use strict';
+// https://bugzilla.mozilla.org/show_bug.cgi?id=1363508
+
+let padlen = 18
+let oTemp = {'pointer':{},'touch':{}}
+let oData = {} // sorted oTemp for display and oFP
+let oFP = {
+	'pointer': {},
+	'maxTouchPoints': '',
+	'touch': {},
+	'touch_properties': '',
+}
+let isStart = true, hasKeys = false
+let setEvents = new Set()
+
+// sorted list: these are all numbers
+let aList = [
+	'clientX','clientY',
+	'force', // float 0.0 (no pressure) - 1.0 (max pressure)
+	'radiusX','radiusY',
+	'rotationAngle',
+	'screenX',
+	'screenY', // RFP = matches clientX/Y
+]
+// not sorted: so we group display items
+let oList = {
+	pointerId: "number", //
+	isPrimary: "boolean", // RFP true
+	pressure: "number", // RFP: 0 if not active, 0.5 if active
+	mozPressure: "number", // RFP should always return 0.5 now
+	pointerType: "string", // RFP mouse
+	mozInputSource: "number", // RFP should be 1 now
+	tangentialPressure: "number", // RFP 0
+	tiltX: "number", // RFP 0
+	tiltY: "number", // RFP 0
+	twist: "number", // RFP 0
+	width: "number", // RFP 1
+	height: "number", // RFP 1
+	altitudeAngle: "number",
+	azimuthAngle: "number",
+}
+// events
+let oDataEvents = {
+	'pointer': ['down','enter','leave','move','over','out','up'],
+	'touch': ['cancel','end','move','start'],
+}
+let oNonDataEvents = {
+	'mouse': ['down','enter','leave','move','out','over','up'],
+	'pointer': ['cancel'],
+	//'touch': ['cancel'],
+}
+
+function finish() {
+	// check all events have been recorded
+		// pointer
+	let expected = oDataEvents.pointer.length
+	let count = Object.keys(oTemp.pointer).length
+	if (count !== expected) {return}
+		// touch
+	expected = oDataEvents.touch.length
+	count = Object.keys(oTemp.touch).length
+	if (hasKeys && count !== expected) {return}
+
+	// sort & filter object for consistent hashes
+	for (const k of Object.keys(oTemp).sort()) {
+		oData[k] = {}
+		for (const n of Object.keys(oTemp[k]).sort()) {oData[k][n] = oTemp[k][n]}
+	}
+	// grab hashes
+	let hash = mini(oFP.pointer)
+	dom.pointerhash.innerHTML = hash
+
+	hash = mini(oFP.touch)
+	if (0 == count) {hash = 'none'; oFP.touch = 'none'}
+	dom.touchhash.innerHTML = hash
+
+	hash = mini(oFP)
+	dom.hash.innerHTML = hash + '<span class="spaces"><br><br>' + json_stringify(oFP) +"</span>"
+	console.log('fingerprint\n', oFP)
+	console.log('data\n', oData)
+
+}
+
+function runtouch(event, type) {
+	// return if we already captured it
+	let input = 'touch'
+	if (undefined !== oTemp[input][type]) {return}
+	addEvent(type)
+	oTemp[input][type] = {}
+
+	try {
+		let touch = event.touches[0]
+		// touchcancel + touchend don't have touch data
+		if (undefined == touch) {
+			touch = event.changedTouches[0]
+		}
+		aList.forEach(function(k){
+			let value
+			try {
+				value = touch[k]
+				if ('number' !== typeof value) {
+					value = 'err'
+				} else if (Number.isNaN(value)) {
+					value = 'NaN'
+				}
+				oTemp[input][type][k] = value
+			} catch(e) {
+				oTemp[input][type][k] = e.name
+			}
+		})
+
+		// display when we have all events
+		let expected = oDataEvents[input].length
+		let count = Object.keys(oTemp[input]).length
+		if (count == expected) {
+			let oDisplay = [], oTmpFP = {}
+			let aStable = [0, 0.5, 1]
+
+			aList.forEach(function(k){
+				// if all tests are the same value just display one value
+				let aSet = new Set(), aArray = []
+				for (const p of Object.keys(oTemp[input]).sort()) { // sort so array is in order when needed
+					let x = oTemp[input][p][k]
+					// force is variable
+					if ('force' == k) {if ('number' == typeof x && !aStable.includes(x)) {x = 'float'}}
+					aSet.add(x)
+					aArray.push(x)
+				}
+				let fp = aArray
+				if (1 == aSet.size) {aArray = Array.from(aSet); fp = aArray[0]}
+				let str = aArray.join(' | ')
+				oDisplay.push(s6 + k.padStart(padlen) +": "+ sc + str)
+				oTmpFP[k] = fp
+			})
+			// modify the FP by replacing screen/clientX/Y with booleans for valid matches
+			let aCoords = ['X','Y']
+			aCoords.forEach(function(k){
+				let isMatch = false, isAValid = true, isBValid = true
+				let A = oTmpFP['client' +k], B = oTmpFP['screen'+ k]
+				let typeA = typeof A, typeB = typeof B
+				if ('object' == typeA) {
+					A.forEach(function(m){if ('number' !== typeof m) {isAValid = false}})
+				} else {
+					if ('number' !== typeA) {isAValid = false}
+				}
+				if ('object' == typeB) {
+					B.forEach(function(m){if ('number' !== typeof m) {isBValid = false}})
+				} else {
+					if ('number' !== typeB) {isAValid = false}
+				}
+				if (isAValid && isBValid) {isMatch = mini(A) === mini(B)}
+				// remove
+				delete oTmpFP['client' +k]
+				delete oTmpFP['screen' +k]
+				// add
+				oTmpFP['client_screen_'+ k +'_match'] = isMatch
+			})
+			// sort FP data into overall FP
+			for (const k of Object.keys(oTmpFP).sort()) {oFP[input][k] = oTmpFP[k]}
+			dom.touch.innerHTML = oDisplay.join("<br>") + '<br><br>'
+			finish()
+		}
+	} catch(e) {
+		dom.touch.innerHTML = e+'<br><br>'
+	}
+}
+
+function run(event, type) {
+	// return if we already captured it
+	let input = 'pointer'
+	if (undefined !== oTemp[input][type]) {return}
+	addEvent(type)
+	oTemp[input][type] = {}
+
+	// isPrimary: https://developer.mozilla.org/en-US/docs/Web/API/PointerEvent/isPrimary
+		// pen/touch can be true or false: as discovered in tests
+	let oEvent = {}
+
+	for (const k of Object.keys(oList)) {
+		let value
+		try {
+			value = event[k]
+			let	expected = oList[k]
+			if (typeof value !== expected) {
+				value = 'err'
+			} else if ("number" == expected && Number.isNaN(value)) {
+				value = 'NaN'
+			}
+		} catch(e) {
+			value = e.name
+		}
+		oEvent[k] = value
+	}
+	// sort
+	for (const k of Object.keys(oEvent).sort()) {oTemp[input][type][k] = oEvent[k]}
+
+	// display when we have all events
+	let expected = oDataEvents[input].length
+	let count = Object.keys(oTemp[input]).length
+	if (count == expected) {
+		let oDisplay = [], oTmpFP = {}
+		let aStable = [0, 0.5, 1]
+
+		let lines = ["pressure", "pointerType", "tangentialPressure", "altitudeAngle"]
+		let divider = "<span class='faint'>" + "----------".padStart(padlen) +"--------"+ sc
+		for (const k of Object.keys(oList)) {
+			if (lines.includes(k)) {oDisplay.push(divider)}
+
+			// if all tests are the same value just display one value
+			let aSet = new Set(), aArray = []
+			for (const p of Object.keys(oTemp[input]).sort()) { // sort so array is in order when needed
+				let x = oTemp[input][p][k]
+				// active pen pressure is variable between 0-1
+				if ('pressure' == k || 'mozPressure' == k) {
+					if ('number' == typeof x && !aStable.includes(x)) {x = 'float'}
+				}
+				aSet.add(x)
+				aArray.push(x)
+			}
+			let fp = aArray
+			if (1 == aSet.size) {aArray = Array.from(aSet); fp = aArray[0]}
+			let str = aArray.join(' | ')
+			// tweak the fp width/height for less entropy/stability (e.g touch)
+				// but still show real values in display str
+			if ('width' == k || 'height' == k) {
+				if ('object' == typeof fp) {fp = 'mixed'}
+			}
+
+			oDisplay.push(s6 + k.padStart(padlen) +": "+ sc + str)
+			oTmpFP[k] = fp
+		}
+		// sort FP data into overall FP
+		for (const k of Object.keys(oTmpFP).sort()) {oFP[input][k] = oTmpFP[k]}
+		dom.results.innerHTML = oDisplay.join("<br>") + '<br><br>'
+		finish()
+	}
+}
+
+function addEvent(type) {
+	setEvents.add(type)
+	let aEvents = Array.from(setEvents)
+	dom.events.innerHTML = aEvents.join(', ')
+}
+
+function reset() {
+	oTemp = {'pointer':{},'touch':{}}, oData = {}
+	oFP.pointer = {}
+	oFP.touch = {}
+
+	// force mouse out of target area
+	if (isStart) {
+		start()
+		dom.resettext.innerHTML = '1: RESET'
+		isStart = false
+	} else {
+		dom.results = ''
+		dom.touch = ''
+		dom.events = ''
+		dom.hash = ''
+		dom.touchhash = ''
+		dom.pointerhash = ''
+		setEvents.clear()
+	}
+}
+
+function start() {
+	let target = dom.target
+	// record the event happening
+	for (const k of Object.keys(oNonDataEvents)) {
+		let list = oNonDataEvents[k]
+		list.forEach(function(type){
+			target.addEventListener(k + type, (event) => {addEvent(k + type)})
+		})
+	}
+	// record data on these events
+	for (const k of Object.keys(oDataEvents)) {
+		let list = oDataEvents[k]
+		dom[k +'events'].innerHTML = ' [' + list.join('|') +'] '
+		list.forEach(function(type){
+			let str = 'auxclick' == type ? type : k + type
+			if ('pointer' == k) {
+				target.addEventListener(str, (event) => {run(event, str)})
+			} else if ('touch' == k) {
+				target.addEventListener(str, (event) => {runtouch(event, str)})
+			}
+		})
+	}
+	// add an auxclick
+	// tested, this doesn't seem to reveal/leak anything than all the other pointer events
+	//target.addEventListener('auxclick', (event) => {run(event, 'auxclick')})
+}
+
+function run_once() {
+	let hash, display = '', data = {'element': [], 'window': []}
+
+	// maxtouchpoints
+	try {hash = navigator.maxTouchPoints} catch(e){hash = zErr}
+	oFP.maxTouchPoints = hash
+	dom.maxTouchPoints.innerHTML = hash
+
+	// keys
+	try {
+		let parser = new DOMParser
+		let doc = parser.parseFromString('<div>', "text/html")
+		let htmlElement = doc.body.firstChild
+		for (const key in htmlElement) {
+			if (key.includes('Touch') || key.includes('touch')) {data['element'].push(key)}
+		}
+		if (data['element'].length) {
+			hasKeys = true // when we have element keys we have touch events
+		} else {
+			data['element'] = 'none'
+		}
+	} catch(e) {
+		data['element'] = e.name
+	}
+	// properties
+	let id = 'iframe-window-version'
+	try {
+		// create & append
+		let el = document.createElement('iframe')
+		el.setAttribute('id', id)
+		el.setAttribute('style', 'display: none')
+		document.body.appendChild(el)
+		// get props
+		let iframe = dom[id]
+		let contentWindow = iframe.contentWindow
+		let props = Object.getOwnPropertyNames(contentWindow)
+		props.forEach(function(item){
+			if (item.includes('Touch') || item.includes('touch')) {data['window'].push(item)}
+		})
+		if (data['window'].length == 0) {
+			data['window'] = 'none'
+		}
+	} catch(e) {
+		data['window'] = e.name
+	}
+	removeElementFn(id)
+
+	// hash
+	if (data['element'].length && 'object' == typeof data['element']) {data.element.sort()}
+	if (data['window'].length && 'object' == typeof data['window']) {data['window'].sort()}
+	hash = mini(data)
+	if ('a9139fa7' == hash) {data = 'none'; hash = 'none'} else {display = '<br><br>' + json_stringify(data)}
+	oFP.touch_properties = data
+	dom.touch_properties.innerHTML = hash + display
+}
+
+let targetreset = dom.reset
+targetreset.addEventListener("pointerdown", (event) => {reset()})
+run_once()
+
+
+</script>
+</body>
+</html>
